@@ -32,40 +32,78 @@ const isForeign = (ctx) => {
 };
 
 /*
- * genTransactionData(ctx)
- * Generate a object with transaction attributes
- * @param { Object } ctx - generated context from dal execution
+ * buildTransactionData(context)
+ * build a object with transaction attributes
+ * @param { Object } context - generated context from dal execution
  * @return { Object } - object with transaction attributes
  */
-const genTransactionData = (ctx) => {
-    const payment = ctx.payment,
-        soft_descriptor = (ctx.project.permalink||"").substring(0, 13),
-        customer = payment.data.customer,
-        is_international = isForeign(ctx);
+const buildTransactionData = (context) => {
+    const payment = context.payment
+    const isCreditCard = payment.data.payment_method === 'credit_card'
 
-    let data = {
-        amount: payment.data.amount,
-        payment_method: payment.data.payment_method,
+    return {
         postback_url: process.env.POSTBACK_URL,
-        async: false,
+        async :false,
+
+        payment_method: payment.data.payment_method,
+        amount: payment.data.amount,
+
+        ...(isCreditCard ? cardTransactionData(context) : bankSlipTransactionData(context)),
+        ...buildTransactionMetadata(payment)
+    }
+}
+
+/*
+ * cardTransactionData(context)
+ * build a object with credit card transaction attributes
+ * @param { Object } context - generated context from dal execution
+ * @return { Object } - object with credit card transaction attributes
+ */
+const cardTransactionData = (context) => {
+    const payment = context.payment
+    const transactionDescription = (context.project.permalink || '').substring(0, 13)
+    const cardHash = payment.data.card_hash
+
+    return {
+        capture: false,
+        soft_descriptor: transactionDescription,
+        ...(cardHash ? { card_hash: card_hash } : { card_id: context.payment_card.gateway_data.id })
+    }
+}
+
+/*
+ * bankSlipTransactionData(context)
+ * build a object with bank slip transaction attributes
+ * @param { Object } context - generated context from dal execution
+ * @return { Object } - object with bank slip transaction attributes
+ */
+const bankSlipTransactionData = (context) => {
+    const payment = context.payment
+    const customer = payment.data.customer
+    const isIndividual = customer.document_number.length === 11
+
+    return {
         customer: {
             name: customer.name,
-            email: customer.email,
-            document_number: (is_international ? '00000000000' : customer.document_number),
-            address: {
-                street: customer.address.street,
-                street_number: (is_international ? '100' : customer.address.street_number),
-                neighborhood: (is_international ? 'international' : customer.address.neighborhood),
-                zipcode: (is_international ? '00000000' : customer.address.zipcode),
-                city: customer.address.city,
-                state: customer.address.state
-            },
-            phone: {
-                ddi: (is_international ? '55' : customer.phone.ddi),
-                ddd: (is_international ? '33' : customer.phone.ddd),
-                number: (is_international ? '33335555' : customer.phone.number)
+            type: isIndividual ? 'individual' : 'corporation',
+            documents: [
+                {
+                    type: isIndividual ? 'cpf' : 'cnpj',
+                    number: customer.document_number
+                }
+            ]
+        }
+    }
             }
-        },
+
+/*
+ * buildTransactionMetadata(context)
+ * build a object with metadata transaction attributes
+ * @param { Object } context - generated context from dal execution
+ * @return { Object } - object with metadata transaction attributes
+ */
+const buildTransactionMetadata = (payment) => {
+    return {
         metadata: {
             payment_id: payment.id,
             project_id: payment.project_id,
@@ -73,20 +111,9 @@ const genTransactionData = (ctx) => {
             subscription_id: payment.subscription_id,
             user_id: payment.user_id,
             cataloged_at: payment.created_at
-        },
-        antifraud_metadata: genAFMetadata(ctx)
-    };
-
-    if(data.payment_method === 'credit_card' ) {
-        !R.isNil(payment.data.card_hash) ? (data.card_hash = payment.data.card_hash ) : (data.card_id = ctx.payment_card.gateway_data.id)
-        data.soft_descriptor = soft_descriptor;
-    } else {
-        data.boleto_expiration_date = expirationDate(DateTime.local(), 4);
+        }
     }
-
-    console.log('generated transaction data -> ', data)
-    return data;
-};
+    }
 
 /*
  * expirationDate(accTime, plusDays)
@@ -116,7 +143,7 @@ const expirationDate = (accTime, plusDays) => {
  */
 const createGatewayTransaction = async (transactionData) => {
     let client = await gatewayClient();
-    let transaction = await client.transactions.create(transactionData);
+    let transaction = await client.withVersion('2019-09-01').transactions.create(transactionData);
     return transaction;
 };
 
@@ -151,14 +178,13 @@ const processPayment = async (dbclient, paymentId) => {
 
     try {
         await dbclient.query('BEGIN;');
-        const transaction = await createGatewayTransaction(genTransactionData(ctx)),
-            payables = await fetchTransactionPayables(transaction.id),
-            transaction_reason = { transaction, payables },
-            isPendingPayment = anyTransactionInInitialStatus(transaction.status);
+        const transaction = await createGatewayTransaction(buildTransactionData(ctx))
+        const payables = await fetchTransactionPayables(transaction.id)
+        const transaction_reason = { transaction, payables }
+        const isPendingPayment = anyTransactionInInitialStatus(transaction.status);
 
         await dalCtx.updateGatewayDataOnPayment(paymentId, transaction_reason);
         await dalCtx.buildGatewayGeneralDataOnPayment(paymentId, transaction, payables);
-
 
         // create credit card when save_card is true
         // or when subscription has no credit_card_id
@@ -222,7 +248,7 @@ const processPayment = async (dbclient, paymentId) => {
 module.exports = {
     gatewayClient,
     isForeign,
-    genTransactionData,
+    buildTransactionData,
     expirationDate,
     createGatewayTransaction,
     fetchTransactionPayables,
