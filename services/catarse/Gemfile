@@ -10,7 +10,7 @@ gem 'rails-observers'
 gem 'rb-readline'
 gem 'ruby-progressbar'
 
-gem 'sidekiq',  '~> 4.0.1'
+gem 'sidekiq',  '~> 5.2.8'
 
 # Turns every field on a editable one
 gem "best_in_place"
