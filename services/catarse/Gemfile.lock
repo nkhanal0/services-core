@@ -1,16 +1,16 @@
 GIT
-  remote: git://github.com/SamMolokanov/fakeweb.git
-  revision: 10be5e089608606953d5df7b560cef23b0469b47
+  remote: https://github.com/SamMolokanov/fakeweb.git
+  revision: 28076a40b286e2a6cbc2a5e451c79e29154a0aa8
   branch: ruby-2-4-1-support
   specs:
     fakeweb (1.3.0)
 
 GIT
-  remote: git://github.com/catarse/redactor-rails.git
-  revision: 9a58b7ecbd33acad7e9cb66476e349262c72d093
+  remote: https://github.com/catarse/redactor-rails.git
+  revision: d7eedc44bbb7a5d91eb3352cba8e863be4bb06aa
   branch: master
   specs:
-    redactor-rails (0.5.0)
+    redactor-rails (0.7.0)
       devise
       mime-types
       orm_adapter
@@ -328,6 +328,7 @@ GEM
     net_http_timeout_errors (0.3.0)
     netrc (0.11.0)
     newrelic_rpm (3.18.1.330)
+    nio4r (2.5.8)
     nokogiri (1.8.5)
       mini_portile2 (~> 2.3.0)
     oauth (0.5.1)
@@ -380,7 +381,8 @@ GEM
       coderay (~> 1.1.0)
       method_source (~> 0.8.1)
       slop (~> 3.4)
-    puma (3.12.0)
+    puma (4.3.12)
+      nio4r (~> 2.0)
     pundit (1.1.0)
       activesupport (>= 3.0.0)
     rack (1.6.11)
